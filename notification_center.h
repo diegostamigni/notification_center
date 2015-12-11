@@ -53,12 +53,11 @@ class Notification {
 	std::string tag_;
 };
 
-class Observable {
-  public:
-	virtual void operator()(const ds::Notification &n) const = 0;
-};
-
 class NotificationCenter {
+  public:
+	// Executor definition, a lambda to what to do
+	using Executor = std::function<void(const Notification &notif)>;
+
   public:
 	NotificationCenter () {};
 	NotificationCenter (NotificationCenter &&) = delete;
@@ -67,7 +66,8 @@ class NotificationCenter {
 	NotificationCenter &operator=(NotificationCenter &&) = delete;
 
 	// Singleton strategy with the new C++ meaning of `static'
-	// Probably we don't need any unique/shared_ptr though...
+	// regarding the thread-safe thing.
+	// --
 	template<typename... Args>
 	static NotificationCenter *instance(Args&&... args) {
 		static NotificationCenter *i =
@@ -79,7 +79,7 @@ class NotificationCenter {
 	// --
 	// Example: AddObserver("MyNotification", this)
 	void AddObserver(const std::string &id,
-	                 const std::shared_ptr<Observable> &f) {
+	                 const Executor &f) {
 		std::lock_guard<std::mutex> guard(lock_);
 		observers_.emplace_back(id, f);
 	}
@@ -95,7 +95,7 @@ class NotificationCenter {
 			if (obj.first == id) {
 				if (obj.second != nullptr) {
 					Notification notif(id, object);
-					(*obj.second)(std::move(notif));
+					(obj.second)(std::move(notif));
 				}
 			}
 		});
@@ -132,7 +132,7 @@ class NotificationCenter {
 	//   - 	multiple keys associated with different observers
 	//	 - 	operate in order to manipulate the data structure
 	//		for the related operations
-	using observer_ = std::pair <std::string, std::shared_ptr<Observable>>;
+	using observer_ = std::pair <std::string, Executor>;
 	std::vector<observer_> observers_;
 	std::mutex lock_;
 };
